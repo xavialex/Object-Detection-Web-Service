@@ -2,21 +2,14 @@ import os
 import cv2
 import time
 import argparse
-import multiprocessing
 import numpy as np
 import tensorflow as tf
 import threading
-import sys
+#import sys
 
 from utils import FPS, WebcamVideoStream
-from multiprocessing import Process, Queue, Pool
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as vis_util
-
-from PIL import Image
-import requests
-from io import BytesIO
-from io import StringIO
 
 CWD_PATH = os.getcwd()
 TF_MODELS_PATH = os.path.join(CWD_PATH, r'C:\Users\festevem\Documents\Control temperatura\TensorFlow Object Detection Models', 'trained_models')
@@ -223,7 +216,6 @@ def main():
                 print('[INFO] elapsed time: {:.2f}'.format(time.time() - t))
         
                 if cv2.waitKey(1) & 0xFF == ord('q'):
-                    
                     break
                                   
             # Ending resources
