@@ -5,27 +5,20 @@ import argparse
 import numpy as np
 import tensorflow as tf
 import threading
-#import sys
 
-from utils import FPS, WebcamVideoStream
+from utils import WebcamVideoStream
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as vis_util
 
 CWD_PATH = os.getcwd()
-TF_MODELS_PATH = os.path.join(CWD_PATH, r'C:\Users\festevem\Documents\Control temperatura\TensorFlow Object Detection Models', 'trained_models')
+TF_MODELS_PATH = CWD_PATH
 # Path to frozen detection graph. This is the actual model that is used for the object detection
 MODEL_NAME = 'ssd_mobilenet_v1_coco_11_06_2017'
-"""Models available: 
-    ssd_mobilenet_v1_coco_11_06_2017 -> Fast - 21 mAP
-    ssd_inception_v2_coco_11_06_2017 -> Fast - 24 mAP
-    rfcn_resnet101_coco_11_06_2017 -> Medium - 30 mAP
-    faster_rcnn_resnet101_coco_11_06_2017 -> Medium - 32 mAP
-    faster_rcnn_inception_resnet_v2_atrous_coco_11_06_2017 -> Slow - 37 mAP
-"""
+
 PATH_TO_CKPT = os.path.join(TF_MODELS_PATH, MODEL_NAME, 'frozen_inference_graph.pb')
 
 # List of the strings that is used to add correct label for each box
-PATH_TO_LABELS = os.path.join(CWD_PATH, r'C:\Users\festevem\Documents\Control temperatura\object_detection', 'data', 'mscoco_label_map.pbtxt')
+PATH_TO_LABELS = os.path.join(CWD_PATH, 'object_detection', 'data', 'mscoco_label_map.pbtxt')
 
 NUM_CLASSES = 90
 
@@ -88,7 +81,6 @@ def detect_objects(image_np, sess, detection_graph):
             TotalPeople.i = total_people
         elif classes_np[i] != 1:
             scores_np[i] = 0.02
-    print("################# " + str(TotalPeople.i) + " #################")
     
     # Visualization of the results of a detection
     vis_util.visualize_boxes_and_labels_on_image_array(
@@ -103,9 +95,8 @@ def detect_objects(image_np, sess, detection_graph):
     return image_np
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
-#import socketserver
 
-# This class will constantly show in a web the number of people detected in a frame
+# Serving a web interface
 class ObjectDetectionHandler(BaseHTTPRequestHandler):
     def _set_headers(self):
         self.send_response(200)
@@ -136,33 +127,32 @@ class ObjectDetectionHandler(BaseHTTPRequestHandler):
         else:
             # Loading the resulting web and serving it again
             self._set_headers()
-            html_file = open("mi_index.html", 'r', encoding='utf-8')
+            html_file = open("ui.html", 'r', encoding='utf-8')
             source_code = html_file.read()
             self.wfile.write(bytes(source_code, "utf8"))
+      
+    # Overriding log messages    
+    def log_message(self, format, *args):
+        return
         
-        
-
 class ObjectDetectionThread(threading.Thread):
     def __init__(self, name):
         super(ObjectDetectionThread, self).__init__()
         self.name = name
-        #self._stop_event = threading.Event()
+        self._stop_event = threading.Event()
         
       
     def run(self):
         server_address = ('127.0.0.1', 8080)
         self.httpd = HTTPServer(server_address, ObjectDetectionHandler)
-        print('Starting httpd...' + self.name)
         self.httpd.serve_forever()
-       
+
     def stop(self):
-       print('Stop Thread...************')
-       #self.is_running = False
        self.httpd.shutdown()
        self.stopped = True
-
-#   def stopped(self):
-#       return self._stop_event.is_set()
+       
+    def stopped(self):
+       return self._stop_event.is_set()
        
 def argument_parser():
     """
@@ -179,21 +169,11 @@ def argument_parser():
 
 
 def main():    
-#    parser = argparse.ArgumentParser()
-#    parser.add_argument('-src', '--source', dest='video_source', type=int,
-#                        default=0, help='Device index of the camera.')
-#    parser.add_argument('-wd', '--width', dest='width', type=int,
-#                        default=480, help='Width of the frames in the video stream.')
-#    parser.add_argument('-ht', '--height', dest='height', type=int,
-#                        default=360, help='Height of the frames in the video stream.')
-#    args = parser.parse_args()
-    
     args = argument_parser()
     
     video_capture = WebcamVideoStream(src=args.video_source,
                                       width=args.width,
                                       height=args.height).start()
-    fps = FPS().start()
     
     detection_graph = model_load_into_memory()
     
@@ -208,25 +188,18 @@ def main():
                 # Camera detection loop
                 frame = video_capture.read()
                 cv2.imshow('Entrada', frame)
-                t = time.time()
                 output = detect_objects(frame, sess, detection_graph)
                 TotalPeople.img = cv2.imencode('.jpeg', output)
                 cv2.imshow('Video', output)
-                fps.update()
-                print('[INFO] elapsed time: {:.2f}'.format(time.time() - t))
         
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
                                   
             # Ending resources
             video_capture.stop()
-            fps.stop()
-            print('[INFO] elapsed time (total): {:.2f}'.format(fps.elapsed()))
-            print('[INFO] approx. FPS: {:.2f}'.format(fps.fps()))
             http_thread.stop()
             cv2.destroyAllWindows()
                         
 if __name__ == "__main__":
     main()
-    #sys.exit()
     
