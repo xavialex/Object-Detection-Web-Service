@@ -89,9 +89,8 @@ def main():
     http_thread.daemon = True
     http_thread.start()
     
-    #cap = cv2.VideoCapture('http://10.68.8.116:8080/prueba.ogg')
+    cap = cv2.VideoCapture('http://10.68.8.116:8080/prueba.ogg')
     #cap = cv2.VideoCapture('http://10.68.14.60:8080/qqq.ogg')
-    cap = cv2.VideoCapture('http://localhost:8080/prueba.ogg')
     
     with detection_graph.as_default():
         with tf.Session(graph=detection_graph) as sess:
@@ -99,9 +98,9 @@ def main():
                 # Camera detection loop
                 ret, frame = cap.read()
                 cv2.imshow('Entrada', frame)
-#                output = detect_objects(frame, sess, detection_graph)
-#                TotalPeople.img = cv2.imencode('.jpeg', output)
-#                cv2.imshow('Video', output)
+                output = detect_objects(frame, sess, detection_graph)
+                TotalPeople.img = cv2.imencode('.jpeg', output)
+                cv2.imshow('Video', output)
         
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
