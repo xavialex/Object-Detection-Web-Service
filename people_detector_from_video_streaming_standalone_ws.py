@@ -1,12 +1,12 @@
 import os
 import cv2
+import argparse
 import numpy as np
 import tensorflow as tf
+import threading
 
 from object_detection.utils import label_map_util
 from object_detection.utils import visualization_utils as vis_util
-
-from http_utils import TotalPeople, ObjectDetectionThread
 
 CWD_PATH = os.getcwd()
 TF_MODELS_PATH = CWD_PATH
@@ -19,6 +19,17 @@ PATH_TO_CKPT = os.path.join(TF_MODELS_PATH, MODEL_NAME, 'frozen_inference_graph.
 PATH_TO_LABELS = os.path.join(CWD_PATH, 'object_detection', 'data', 'mscoco_label_map.pbtxt')
 
 NUM_CLASSES = 90
+
+class TotalPeople:
+    """Static variables accesible for the main and HTTP threads.
+    
+    Args:
+    i (int): Total number of people detected.
+    img (nparray): Encoded image with the results of the prediction.
+    
+    """
+    i = 0
+    img = 0
 
 # Loading label map
 label_map = label_map_util.load_labelmap(PATH_TO_LABELS)
@@ -68,7 +79,7 @@ def detect_objects(image_np, sess, detection_graph):
             TotalPeople.i = total_people
         elif classes_np[i] != 1:
             scores_np[i] = 0.02
-                
+    
     # Visualization of the results of a detection
     vis_util.visualize_boxes_and_labels_on_image_array(
         image_np,
@@ -80,11 +91,83 @@ def detect_objects(image_np, sess, detection_graph):
         min_score_thresh=.5, 
         line_thickness=8)
     return image_np
+
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# Serving a web interface
+class ObjectDetectionHandler(BaseHTTPRequestHandler):
+    def _set_headers(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        
+    def _set_image_headers(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'image/jpeg')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+
+    def do_GET(self):
+        """Looks in the target URL for the 'img' keyword.
+        If so, loads into it the processed image.
+        If not, loads the total number of people detected.
+        
+        """
+        if 'img' in self.path:
+            self._set_image_headers()
+            content = TotalPeople.img
+            self.wfile.write(content[1].tobytes())
+        elif 'total' in self.path:
+            self._set_headers()
+            message = str(TotalPeople.i)
+            self.wfile.write(bytes(message, "utf8"))
+        else:
+            # Loading the resulting web and serving it again
+            self._set_headers()
+            html_file = open("ui.html", 'r', encoding='utf-8')
+            source_code = html_file.read()
+            self.wfile.write(bytes(source_code, "utf8"))
       
+    # Overriding log messages    
+    def log_message(self, format, *args):
+        return
+        
+class ObjectDetectionThread(threading.Thread):
+    def __init__(self, name):
+        super(ObjectDetectionThread, self).__init__()
+        self.name = name
+        self._stop_event = threading.Event()
+        
+      
+    def run(self):
+        server_address = ('127.0.0.1', 8080)
+        self.httpd = HTTPServer(server_address, ObjectDetectionHandler)
+        self.httpd.serve_forever()
 
-def main():    
+    def stop(self):
+       self.httpd.shutdown()
+       self.stopped = True
+       
+    def stopped(self):
+       return self._stop_event.is_set()
+       
+def argument_parser():
+    """Arguments that may be used when starting the app from command prompt"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-src', '--source', dest='video_source', type=int,
+                        default=0, help='Device index of the camera.')
+    parser.add_argument('-wd', '--width', dest='width', type=int,
+                        default=480, help='Width of the frames in the video stream.')
+    parser.add_argument('-ht', '--height', dest='height', type=int,
+                        default=360, help='Height of the frames in the video stream.')
+    return parser.parse_args()
+
+
+def main():  
     detection_graph = model_load_into_memory()
-
+    
+    # Thread starting in background
     http_thread = ObjectDetectionThread("HTTP Publisher Thread")
     http_thread.daemon = True
     http_thread.start()
@@ -97,6 +180,7 @@ def main():
             while True:  
                 # Camera detection loop
                 ret, frame = cap.read()
+                #frame = video_capture.read()
                 cv2.imshow('Entrada', frame)
                 output = detect_objects(frame, sess, detection_graph)
                 TotalPeople.img = cv2.imencode('.jpeg', output)
